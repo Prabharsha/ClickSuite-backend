@@ -1,0 +1,145 @@
+// ClickSuite.app — Prisma schema
+// Booking & studio-management SaaS for photographers / videographers / creative studios.
+// Multi-tenant: every Booking belongs to a Workspace; users access data through WorkspaceMember.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------------------ //
+//  Enums                                                              //
+// ------------------------------------------------------------------ //
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MANAGER
+  TEAM_MEMBER
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  TEAM_ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIALLY_PAID
+  FULLY_PAID
+  REFUNDED
+}
+
+enum WorkProgressStatus {
+  NOT_STARTED
+  PRE_PLANNING
+  EVENT_COVERED
+  EDITING
+  READY_FOR_DELIVERY
+  DELIVERED
+  COMPLETED
+}
+
+// ------------------------------------------------------------------ //
+//  Models                                                             //
+// ------------------------------------------------------------------ //
+
+model User {
+  id           String   @id @default(uuid())
+  fullName     String
+  email        String   @unique
+  passwordHash String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships     WorkspaceMember[]
+  createdBookings Booking[]         @relation("BookingCreatedBy")
+
+  @@index([email])
+  @@map("users")
+}
+
+model Workspace {
+  id                  String   @id @default(uuid())
+  name                String
+  businessType        String?
+  phone               String?
+  email               String?
+  location            String?
+  mainServiceCategory String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  members  WorkspaceMember[]
+  bookings Booking[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String        @id @default(uuid())
+  userId      String
+  workspaceId String
+  role        WorkspaceRole @default(TEAM_MEMBER)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  // A user can only have a single membership row per workspace.
+  @@unique([userId, workspaceId])
+  @@index([userId])
+  @@index([workspaceId])
+  @@map("workspace_members")
+}
+
+model Booking {
+  id           String   @id @default(uuid())
+  workspaceId  String
+  bookingTitle String
+  clientName   String
+  clientPhone  String?
+  clientEmail  String?
+  eventType    String?
+  eventDate    DateTime
+  startTime    String?
+  endTime      String?
+  location     String?
+  packageName  String?
+
+  totalAmount   Decimal @default(0) @db.Decimal(12, 2)
+  advanceAmount Decimal @default(0) @db.Decimal(12, 2)
+  balanceAmount Decimal @default(0) @db.Decimal(12, 2)
+
+  bookingStatus      BookingStatus      @default(PENDING)
+  paymentStatus      PaymentStatus      @default(UNPAID)
+  workProgressStatus WorkProgressStatus @default(NOT_STARTED)
+
+  notes              String?
+  cancellationReason String?
+
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User      @relation("BookingCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@index([workspaceId])
+  @@index([eventDate])
+  @@index([bookingStatus])
+  @@index([paymentStatus])
+  @@index([workProgressStatus])
+  @@index([workspaceId, eventDate])
+  @@map("bookings")
+}
