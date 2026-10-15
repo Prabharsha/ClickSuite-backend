@@ -1,6 +1,7 @@
 import { Logger, ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory, Reflector } from "@nestjs/core";
+import { NestExpressApplication } from "@nestjs/platform-express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import helmet from "helmet";
 import { AppModule } from "./app.module";
@@ -9,7 +10,9 @@ import { ResponseInterceptor } from "./common/interceptors/response.interceptor"
 import { httpLogger } from "./common/middleware/http-logger.middleware";
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { bufferLogs: false });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: false,
+  });
   const config = app.get(ConfigService);
   const logger = new Logger("Bootstrap");
 
@@ -18,6 +21,12 @@ async function bootstrap(): Promise<void> {
 
   // Security headers
   app.use(helmet());
+
+  // Behind Railway's edge proxy, so the client IP arrives in X-Forwarded-For.
+  // Without this every request looks like it comes from the proxy and the
+  // auth rate limiter degrades into one global bucket.
+  // ponytail: single trusted hop; raise the count if more proxies are added.
+  app.set("trust proxy", 1);
 
   // Request/response logging (method, url, status, duration, userId)
   app.use(httpLogger);
@@ -30,6 +39,9 @@ async function bootstrap(): Promise<void> {
     origin: allowedOrigins,
     credentials: true,
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    // Let the browser cache the preflight for 24h. Without this every single
+    // API call is preceded by its own OPTIONS round-trip.
+    maxAge: 86400,
   });
 
   // Global validation: strip unknown props, reject extras, transform payloads

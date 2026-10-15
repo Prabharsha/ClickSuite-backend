@@ -150,8 +150,9 @@ export class BookingsService {
       data.paymentStatus = this.derivePaymentStatus(totalAmount, advanceAmount);
     }
 
-    const booking = await this.prisma.booking.update({ where: { id }, data });
-    return serializeBooking(booking);
+    return serializeBooking(
+      await this.updateAccessibleBooking(userId, id, data),
+    );
   }
 
   async updateStatus(
@@ -159,13 +160,11 @@ export class BookingsService {
     id: string,
     dto: UpdateBookingStatusDto,
   ): Promise<BookingResponse> {
-    await this.getAccessibleBooking(userId, id);
-
-    const booking = await this.prisma.booking.update({
-      where: { id },
-      data: { bookingStatus: dto.bookingStatus },
-    });
-    return serializeBooking(booking);
+    return serializeBooking(
+      await this.updateAccessibleBooking(userId, id, {
+        bookingStatus: dto.bookingStatus,
+      }),
+    );
   }
 
   async updateWorkProgress(
@@ -173,13 +172,11 @@ export class BookingsService {
     id: string,
     dto: UpdateWorkProgressDto,
   ): Promise<BookingResponse> {
-    await this.getAccessibleBooking(userId, id);
-
-    const booking = await this.prisma.booking.update({
-      where: { id },
-      data: { workProgressStatus: dto.workProgressStatus },
-    });
-    return serializeBooking(booking);
+    return serializeBooking(
+      await this.updateAccessibleBooking(userId, id, {
+        workProgressStatus: dto.workProgressStatus,
+      }),
+    );
   }
 
   async cancel(
@@ -187,41 +184,69 @@ export class BookingsService {
     id: string,
     dto: CancelBookingDto,
   ): Promise<BookingResponse> {
-    await this.getAccessibleBooking(userId, id);
-
-    const booking = await this.prisma.booking.update({
-      where: { id },
-      data: {
+    return serializeBooking(
+      await this.updateAccessibleBooking(userId, id, {
         bookingStatus: "CANCELLED",
-        cancellationReason: dto.reason ?? null,
-      },
-    });
-    return serializeBooking(booking);
+        cancellationReason: dto.reason,
+      }),
+    );
   }
 
   /**
-   * Multi-tenant gatekeeper for single-resource routes. Loads the booking,
-   * then confirms the user is a member of the booking's workspace. The 404 is
-   * thrown before the membership check is *revealed* so existence of bookings
-   * in other workspaces is not leaked differently from genuinely missing ones.
+   * Multi-tenant scope for single-resource routes: the booking id *and* proof
+   * that the caller is a member of its workspace, expressed as one filter so
+   * the database enforces both in a single round-trip. A booking in another
+   * workspace simply does not match, so it is reported as missing exactly like
+   * a genuinely absent one — no existence leak.
+   */
+  private accessibleBookingWhere(
+    userId: string,
+    id: string,
+  ): Prisma.BookingWhereUniqueInput {
+    return { id, workspace: { members: { some: { userId } } } };
+  }
+
+  /**
+   * Loads a booking the user is allowed to see, or throws 404.
    */
   private async getAccessibleBooking(
     userId: string,
     id: string,
   ): Promise<Booking> {
-    const booking = await this.prisma.booking.findUnique({ where: { id } });
+    const booking = await this.prisma.booking.findFirst({
+      where: this.accessibleBookingWhere(userId, id),
+    });
     if (!booking) {
       throw new NotFoundException("Booking not found");
     }
-    const membership = await this.workspaces.findMembership(
-      userId,
-      booking.workspaceId,
-    );
-    if (!membership) {
-      // Treat as not found to avoid disclosing bookings in other workspaces.
-      throw new NotFoundException("Booking not found");
-    }
     return booking;
+  }
+
+  /**
+   * Writes to a booking the user is allowed to modify. The access check rides
+   * along in the UPDATE's WHERE clause: no match means either the booking does
+   * not exist or it belongs to someone else's workspace, and Prisma's P2025
+   * covers both — the same 404 the read path returns.
+   */
+  private async updateAccessibleBooking(
+    userId: string,
+    id: string,
+    data: Prisma.BookingUpdateInput,
+  ): Promise<Booking> {
+    try {
+      return await this.prisma.booking.update({
+        where: this.accessibleBookingWhere(userId, id),
+        data,
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2025"
+      ) {
+        throw new NotFoundException("Booking not found");
+      }
+      throw error;
+    }
   }
 
   private derivePaymentStatus(
