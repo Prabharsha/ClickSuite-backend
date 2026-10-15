@@ -1,90 +1,18 @@
-import { ApiPropertyOptional } from "@nestjs/swagger";
-import { Type } from "class-transformer";
-import {
-  IsDateString,
-  IsEmail,
-  IsNotEmpty,
-  IsNumber,
-  IsOptional,
-  IsString,
-  Min,
-} from "class-validator";
+import { OmitType, PartialType } from "@nestjs/swagger";
+import { CreateBookingDto } from "./create-booking.dto";
 
 /**
- * Editable booking fields. workspaceId and the status fields are intentionally
- * excluded — those move through the dedicated status / work-progress / cancel
- * endpoints. Cross-field validation (advance <= total) is enforced in the
- * service after merging with the persisted values.
+ * Editable booking fields: every create field except `workspaceId` (a booking
+ * never moves workspace) and the status fields, which were never part of
+ * create: those move through the dedicated status / work-progress / cancel
+ * endpoints.
+ *
+ * Derived from CreateBookingDto so the field rules (length caps, HH:MM times,
+ * endTime > startTime) are written once and cannot drift between the two
+ * routes that write the same columns. Cross-field money validation still runs
+ * in the service after merging with the persisted values, since a partial
+ * update may send only one of the two amounts.
  */
-export class UpdateBookingDto {
-  @ApiPropertyOptional()
-  @IsString()
-  @IsNotEmpty()
-  @IsOptional()
-  bookingTitle?: string;
-
-  @ApiPropertyOptional()
-  @IsString()
-  @IsNotEmpty()
-  @IsOptional()
-  clientName?: string;
-
-  @ApiPropertyOptional()
-  @IsString()
-  @IsOptional()
-  clientPhone?: string;
-
-  @ApiPropertyOptional()
-  @IsEmail()
-  @IsOptional()
-  clientEmail?: string;
-
-  @ApiPropertyOptional()
-  @IsString()
-  @IsOptional()
-  eventType?: string;
-
-  @ApiPropertyOptional({ example: "2026-08-15" })
-  @IsDateString()
-  @IsOptional()
-  eventDate?: string;
-
-  @ApiPropertyOptional({ example: "09:00" })
-  @IsString()
-  @IsOptional()
-  startTime?: string;
-
-  @ApiPropertyOptional({ example: "18:00" })
-  @IsString()
-  @IsOptional()
-  endTime?: string;
-
-  @ApiPropertyOptional()
-  @IsString()
-  @IsOptional()
-  location?: string;
-
-  @ApiPropertyOptional()
-  @IsString()
-  @IsOptional()
-  packageName?: string;
-
-  @ApiPropertyOptional({ minimum: 0 })
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  @IsOptional()
-  totalAmount?: number;
-
-  @ApiPropertyOptional({ minimum: 0 })
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  @IsOptional()
-  advanceAmount?: number;
-
-  @ApiPropertyOptional()
-  @IsString()
-  @IsOptional()
-  notes?: string;
-}
+export class UpdateBookingDto extends PartialType(
+  OmitType(CreateBookingDto, ["workspaceId"] as const),
+) {}

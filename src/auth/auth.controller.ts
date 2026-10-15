@@ -8,6 +8,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { Throttle, ThrottlerGuard } from "@nestjs/throttler";
 import {
   AuthenticatedUser,
   CurrentUser,
@@ -23,7 +24,11 @@ import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  // Credential endpoints are the ones worth brute-forcing, so they are the
+  // ones that carry a limit. Counted per client IP.
   @Post("register")
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
   @ResponseMessage("Registration successful")
   @ApiOperation({ summary: "Register a new user and create their workspace" })
   register(@Body() dto: RegisterDto) {
@@ -31,6 +36,8 @@ export class AuthController {
   }
 
   @Post("login")
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   @ResponseMessage("Login successful")
   @ApiOperation({ summary: "Authenticate and receive a JWT access token" })

@@ -43,6 +43,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
           message = maybeMessage;
         }
       }
+      // Log *why* the request was rejected. The access log only records the
+      // status code, which makes a 400 from the validation pipe indistinguishable
+      // from any other — the reason has to be recoverable from the server logs.
+      this.logger.warn(
+        `${status} on ${request.method} ${request.url}: ${message}`,
+      );
     } else if (exception instanceof Prisma.PrismaClientKnownRequestError) {
       // Known DB errors → safe, mapped messages. Never leak the raw query/meta.
       ({ status, message } = this.mapPrismaError(exception));
@@ -78,7 +84,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
   } {
     switch (error.code) {
       case "P2002":
-        return { status: HttpStatus.CONFLICT, message: "Resource already exists" };
+        return {
+          status: HttpStatus.CONFLICT,
+          message: "Resource already exists",
+        };
       case "P2025":
         return { status: HttpStatus.NOT_FOUND, message: "Resource not found" };
       case "P2003":
@@ -87,7 +96,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
           message: "Related resource does not exist",
         };
       default:
-        return { status: HttpStatus.BAD_REQUEST, message: "Database request error" };
+        return {
+          status: HttpStatus.BAD_REQUEST,
+          message: "Database request error",
+        };
     }
   }
 

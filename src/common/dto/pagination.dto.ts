@@ -3,6 +3,15 @@ import { Type } from "class-transformer";
 import { IsInt, IsOptional, Max, Min } from "class-validator";
 import { PaginationMeta } from "../interfaces/api-response.interface";
 
+/**
+ * Upper bound on `limit` for every paginated endpoint. Clients that render a
+ * whole workspace in one view (calendars, board views) request a few hundred
+ * rows at once, so the cap sits above that rather than at a token 100. It is
+ * still enforced — an over-large `limit` is rejected with 400, never silently
+ * clamped, so a client is never told "here is everything" when it is not.
+ */
+export const MAX_PAGE_SIZE = 200;
+
 export class PaginationDto {
   @ApiPropertyOptional({
     default: 1,
@@ -18,13 +27,13 @@ export class PaginationDto {
   @ApiPropertyOptional({
     default: 10,
     minimum: 1,
-    maximum: 100,
-    description: "Items per page (max 100)",
+    maximum: MAX_PAGE_SIZE,
+    description: `Items per page (max ${MAX_PAGE_SIZE})`,
   })
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
+  @Max(MAX_PAGE_SIZE)
   @IsOptional()
   limit: number = 10;
 

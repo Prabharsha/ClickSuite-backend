@@ -1,4 +1,4 @@
-import { ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   BookingStatus,
   PaymentStatus,
@@ -14,7 +14,7 @@ import {
 import { PaginationDto } from "../../common/dto/pagination.dto";
 
 export class BookingQueryDto extends PaginationDto {
-  @ApiPropertyOptional({
+  @ApiProperty({
     description: "Workspace to list bookings from (required)",
   })
   @IsString()
