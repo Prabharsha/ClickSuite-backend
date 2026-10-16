@@ -1,0 +1,10 @@
+# Normalize text files to LF both in the repository and in the working tree.
+#
+# The committed blobs were already LF, but with core.autocrlf=true and no
+# attributes file, 19 of 54 files landed in a Windows working tree as CRLF.
+# eslint runs prettier, whose default endOfLine is "lf", so those files
+# produced 1279 errors locally that CI never saw, because actions/checkout
+# writes LF on ubuntu-latest. eol=lf makes the working tree match CI.
+#
+# Every tracked file here is text. Add binary exceptions below if that changes.
+* text=auto eol=lf
